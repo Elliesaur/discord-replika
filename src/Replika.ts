@@ -1,10 +1,7 @@
-import { Cluster } from "cluster";
-
 import * as pc from 'puppeteer-cluster';
 import { Page, ElementHandle } from 'puppeteer';
-import { Console } from "console";
-import { userInfo } from "os";
 
+import { MessageContent, Message } from './ReplikaModels';
 
 export enum ReplikaLoginResult { 
     WRONG_USERNAME,
@@ -12,13 +9,15 @@ export enum ReplikaLoginResult {
     SUCCESS
 }
 
-type OnMessageCallback = (messageElement: ElementHandle<Element>) => void;
+type OnMessageCallback = (messageContents: MessageContent) => void;
+type OnTypingCallback = (isTyping: boolean) => void;
 interface SessionInfo {
     userId: string;
     cookies: any;
     localStorage?: any;
     isActive: boolean;
 }
+
 export class Replika {
 
     private cluster: pc.Cluster;
@@ -144,13 +143,13 @@ export class Replika {
         }, json);
     }
 
-    public async startSession(userId: string, onMessage: OnMessageCallback) {
+    public async startSession(userId: string, onMessage: OnMessageCallback, onTyping: OnTypingCallback, readyForMessages: Function) {
         const userData = this.sessionInfo.find(v => v.userId == userId);
         if (!userData) {
             console.error('Could not find data for uid', userId);
             return false;
         }
-        await this.cluster.queue(undefined, async ({data, page}) => {
+        await this.cluster.queue(undefined, async ({page}) => {
             try {
                 await page.goto('https://my.replika.ai');
                 await this.restoreLocalStorage(page, userId);
@@ -163,72 +162,43 @@ export class Replika {
                     return;
                 }
                 
-                let prevMessageList = [];
-                let offset = 0;
-                let resetting = false;
+                readyForMessages();
+
+                const client = (<any>page)._client;
+
+                client.on('Network.webSocketCreated', ({requestId, url}) => {
+                    console.log('Network.webSocketCreated', requestId, url)
+                })
+                  
+                client.on('Network.webSocketClosed', ({requestId, timestamp}) => {
+                    console.log('Network.webSocketClosed', requestId, timestamp)
+                })
+                
+                client.on('Network.webSocketFrameReceived', ({response}) => {
+                    const json = JSON.parse(response.payloadData);
+
+                    if (json.event_name === 'start_typing') {
+                        onTyping(true);
+                    }
+
+                    // Ignore other events for right now.
+                    if (json.event_name !== 'message') {
+                        return;
+                    }
+
+                    onTyping(false);
+
+                    const messagePayload = <Message>json.payload;
+                    if (messagePayload) {
+                        // If the nature is customer, it is us typing.
+                        if (messagePayload.meta.nature !== 'Customer') {
+                            onMessage(messagePayload.content);
+                        }
+                    }
+                })
 
                 while (this.sessionInfo.find(v => v.userId == userId)) {
                     try {
-                        // Get the latest message made by replika, if the latest is not replika, it will be undefined.
-                        const currentMessagePageElem = (await page.$(this.chatMessageListSelector + ` > div:last-child > div > div:last-child div[data-author="replika"] > span`));
-                        const currentMessageTriggered = currentMessagePageElem !== null ? await currentMessagePageElem.evaluate(e => e.textContent) : undefined;
-
-                        console.log('Current Replika message', currentMessageTriggered);
-                        const lastPrevMessage = prevMessageList[prevMessageList.length - 1];
-                        console.log('Last Previous message', lastPrevMessage);
-                        console.log('Previous Replika messages', prevMessageList);
-
-                        //if (lastPrevMessage !== currentMessageTriggered) {
-                            console.log('We have possibly new messages!');
-
-                            // Need to see how many messages have changed.
-                            let messageDivs = (await page.$$(this.chatMessageListSelector + ' > div'));
-                            if (offset > 0) {
-                                // Fix issues with resending thousands of messages.
-                                messageDivs = messageDivs.slice(offset);
-                            }
-                            const messageContents = [];
-
-                            // Get all message divs, reverse it then add the raw contents to a list.
-                            for (let v of messageDivs) {
-                                const messageElem = await v.$(this.messageAuthorSelector + ' span');
-                                const messageAuthor = await v.$eval(this.messageAuthorSelector, (elem) => elem.getAttribute('data-author'));
-                                if (messageAuthor === 'replika' && messageElem) {
-                                    const textContent = await messageElem.evaluate(e => e.textContent);
-                                    messageContents.push({ text: textContent, elem: messageElem });
-                                }
-                            }
-
-                            // Just the text from them.
-                            const rawMessageContent = messageContents.map(v => v.text);
-
-                            // BUG: When bot sends multiple messages, prev message list has more than the actual raw message content...
-                            // FIX: Use prevMessageList if it is greater than message content length...?
-                            console.log('PrevMessageList to MessageContent', prevMessageList, rawMessageContent);
-
-                            if (prevMessageList.length !== 0 && !resetting) {
-                                const diffInLength = messageContents.length - prevMessageList.length;
-                                if (diffInLength > 0) {
-                                    const messagesToSend = messageContents.slice(messageContents.length - diffInLength);
-                                    messagesToSend.forEach(v => {
-                                        try {
-                                            if (v.elem) {
-                                                onMessage(v.elem);
-                                            }
-                                        } catch (error) {
-                                            console.log(error);
-                                        }
-                                    });
-                                }
-                            } else {
-                                // Because we have nothing to base the previous vs current we cannot continue.
-                                // If we did, we'd send all messages available to the client!
-                                console.log('Offset setting');
-                                offset = messageDivs.length - 1;
-                                resetting = false;
-                            }
-                            
-                        //}
                         const queue = this.messageQueue.filter(v => v.userId == userId);
                         if (queue) {
                             queue.forEach(async item => {
@@ -242,25 +212,14 @@ export class Replika {
                             // Remove items from array.
                             this.messageQueue = this.messageQueue.filter(v => v.userId != userId);
                         }
-                        if (prevMessageList.length >= 50) {
-                            console.log('Resetting');
-                            resetting = true;
-                        }
-                        if (prevMessageList[prevMessageList.length - 1] !== currentMessageTriggered && currentMessageTriggered !== undefined) {
-                            prevMessageList.push(currentMessageTriggered);
-                        }
-                        if (resetting) {
-                            prevMessageList = [];
-                            offset = 0;
-                        }
+                        
                         // Wait a bit...
                         await page.waitFor(1500);
                     } catch (error) {
                         console.error('Error inside while loop, reloading page...', error);
                         await page.goto('https://my.replika.ai')
+                        await page.waitFor(1500);
                     }
-
-                    
                 }
                 console.log('Ending session');
                 page.close();

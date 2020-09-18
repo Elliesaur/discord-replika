@@ -67,17 +67,24 @@ class Bot {
                 const res = await replika.login(email, pass, message.author.id);
                 switch (res) {
                     case ReplikaLoginResult.SUCCESS:
-                        message.channel.send('Alrighty, you\'re all logged in, please wait about 10 seconds before sending a message!')
-                        await replika.startSession(message.author.id, async (messageElem) => {
-                            console.log('Message Received:', await messageElem.evaluate(elem => elem.textContent));
-                            message.channel.send(await messageElem.evaluate(elem => elem.textContent));
+                        await message.channel.send('Alrighty, you\'re all logged in, hold tight while we connect to your Replika...')
+                        await replika.startSession(message.author.id, async (content) => {
+                            // Simply only handle text for now...
+                            if (content.type === 'text') {
+                                await message.channel.send(content.text);
+                            }
+                        }, async (isTyping) => {
+                            isTyping ? message.channel.startTyping() : message.channel.stopTyping();
+                        }, async () => {
+                            message.channel.send('All sorted, you can start chatting now!')
+
                         });
                         break;
                     case ReplikaLoginResult.WRONG_USERNAME:
-                        message.channel.send('Woah, looks like your email is incorrect.')
+                        await message.channel.send('Woah, looks like your email is incorrect.')
                         break;
                     case ReplikaLoginResult.WRONG_PASSWORD: 
-                        message.channel.send('Woah, looks like your password is incorrect.');
+                        await message.channel.send('Woah, looks like your password is incorrect.');
                         break;
                 }
                 
