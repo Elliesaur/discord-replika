@@ -52,10 +52,19 @@ export class Replika {
     public async createCluster() {
         this.cluster = await pc.Cluster.launch({
             concurrency: pc.Cluster.CONCURRENCY_CONTEXT,
-            maxConcurrency: 2,
+            maxConcurrency: 10,
             timeout: Math.pow(2, 31) - 1,
             puppeteerOptions: {
-                headless: false,
+                //headless: false,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu'
+                  ],
             },
         });
     }
@@ -214,11 +223,11 @@ export class Replika {
                         }
                         
                         // Wait a bit...
-                        await page.waitFor(1500);
+                        await new Promise(resolve => setTimeout(resolve, 3000));
                     } catch (error) {
                         console.error('Error inside while loop, reloading page...', error);
                         await page.goto('https://my.replika.ai')
-                        await page.waitFor(1500);
+                        await new Promise(resolve => setTimeout(resolve, 3000));
                     }
                 }
                 console.log('Ending session');
