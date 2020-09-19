@@ -6,8 +6,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Elliesaur",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Elliesaur/discord-replika.git"
+  },
   "dependencies": {
     "discord.js": "^12.3.1",
     "dotenv": "^8.2.0",
