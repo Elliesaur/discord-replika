@@ -64,7 +64,7 @@ export class Replika {
             maxConcurrency: 10,
             timeout: Math.pow(2, 31) - 1,
             puppeteerOptions: {
-                headless: false,
+                //headless: false,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
