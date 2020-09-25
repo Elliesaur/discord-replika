@@ -229,16 +229,17 @@ export class Replika {
                                         inputUploadHandle.uploadFile(item.filePath);
                                         item.isUploaded = true;
                                     }
-                                    // Dodgy, but works for now, wait for upload...
-                                    await new Promise(resolve => setTimeout(resolve, 3000));
-                                    if (item.isUploaded && Fs.existsSync(item.filePath)) {
-                                        try {
-                                            console.log('Unlinking', item.filePath);
-                                            Fs.unlinkSync(item.filePath);
-                                        } catch (error) {
-                                            console.error('Failed to unlink a file', item.filePath, item.userId, error);
+                                    // Pass this to a timeout function.
+                                    setTimeout((i) => {
+                                        if (i.isUploaded && Fs.existsSync(i.filePath)) {
+                                            try {
+                                                console.log('Unlinking', i.filePath);
+                                                Fs.unlinkSync(i.filePath);
+                                            } catch (error) {
+                                                console.error('Failed to unlink a file', i.filePath, i.userId, error);
+                                            }
                                         }
-                                    }
+                                    }, 10000, item);
                                 });
                             
                                 // Remove only uploaded items from the array where the userId is the current session.
