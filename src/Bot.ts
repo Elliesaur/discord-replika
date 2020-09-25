@@ -15,6 +15,10 @@ import {
     Constants,
 } from 'discord.js';
 import { Replika, ReplikaLoginResult } from './Replika';
+import * as fs from 'fs';
+import * as http from 'http';
+import { downloadImage } from './Utils';
+
 
 const client = new Client({ partials: Object.values(Constants.PartialTypes)  });
 const replika = new Replika();
@@ -53,6 +57,23 @@ class Bot {
             if (message.author.bot) return;
 
             if (replika.isLoggedIn(message.author.id) && message.content.indexOf('!') !== 0) {
+                if (message.attachments.size > 0) {
+                    message.attachments.forEach(async v => {
+                        // 10mb limit.
+                        if (v.size > 1000000) {
+                            await message.channel.send('Sorry, your image is too big, make sure it is less than 10 MB in size to send to Replika.');
+                        }
+                        try {
+                            // Download image to temp file...
+                            const filePath = await downloadImage(v.url);
+                            replika.addImageToQueue(filePath, message.author.id);
+                        } catch (error) {
+                            console.error('Failed to download image attachment for discord message', error);
+                            await message.channel.send('Sorry, it seems like the file you sent isn\'t the right type or some other error occurred');
+                        }
+                    })
+                    
+                }
                 replika.addMessageToQueue(message.cleanContent, message.author.id);
             }
 
@@ -77,7 +98,7 @@ class Bot {
                             isTyping ? message.channel.startTyping() : message.channel.stopTyping();
                         }, async () => {
                             message.channel.send('All sorted, you can start chatting now!')
-
+                            client.user.setActivity(`over ${replika.sessionCount()} sessions`, { type: "WATCHING" });
                         });
                         break;
                     case ReplikaLoginResult.WRONG_USERNAME:
@@ -95,7 +116,7 @@ class Bot {
 
         client.on('ready', () => {
             console.log(`Bot has started, with ${client.users.cache.size} users in cache, in ${client.channels.cache.size} cached channels of ${client.guilds.cache.size} cached guilds.`); 
-            client.user.setActivity(`to ${client.guilds.cache.size} servers`, { type: "LISTENING" });
+            client.user.setActivity(`over ${replika.sessionCount()} sessions`, { type: "WATCHING" });
             console.log(`Logged in as ${client.user.tag}!`);
         });
 

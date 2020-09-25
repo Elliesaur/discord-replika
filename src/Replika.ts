@@ -1,6 +1,6 @@
 import * as pc from 'puppeteer-cluster';
 import { Page, ElementHandle } from 'puppeteer';
-
+import * as Fs from 'fs';
 import { MessageContent, Message } from './ReplikaModels';
 
 export enum ReplikaLoginResult { 
@@ -28,6 +28,7 @@ export class Replika {
 
     private sessionInfo: SessionInfo[];
     private messageQueue: any[];
+    private imageQueue: any[];
 
     private readonly sendMessageSelector = '#send-message-textarea';
 
@@ -36,18 +37,26 @@ export class Replika {
         this.saveLocalStorage = this.saveLocalStorage.bind(this);
         this.restoreLocalStorage = this.restoreLocalStorage.bind(this);
         this.addMessageToQueue = this.addMessageToQueue.bind(this);
+        this.addImageToQueue = this.addImageToQueue.bind(this);
         this.closeSession = this.closeSession.bind(this);
         this.isLoggedIn = this.isLoggedIn.bind(this);
         this.destroyCluster = this.destroyCluster.bind(this);
+        this.sessionCount = this.sessionCount.bind(this);
         this.sessionInfo = [];
         this.messageQueue = [];
+        this.imageQueue = [];
     }
-
+    public sessionCount(): number {
+        return this.sessionInfo.length;
+    }
     public isLoggedIn(userId: string) {
         return this.sessionInfo.find(v => v.userId == userId) !== undefined;
     }
     public addMessageToQueue(message: string, userId: string) {
         this.messageQueue.push({userId: userId, message: message});
+    }
+    public addImageToQueue(filePath: string, userId: string) {
+        this.imageQueue.push({userId: userId, filePath: filePath, isUploaded: false});
     }
     public async createCluster() {
         this.cluster = await pc.Cluster.launch({
@@ -55,7 +64,7 @@ export class Replika {
             maxConcurrency: 10,
             timeout: Math.pow(2, 31) - 1,
             puppeteerOptions: {
-                //headless: false,
+                headless: false,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -209,6 +218,35 @@ export class Replika {
                 while (this.sessionInfo.find(v => v.userId == userId)) {
                     try {
                         const queue = this.messageQueue.filter(v => v.userId == userId);
+                        const imageQueue = this.imageQueue.filter(v => v.userId == userId);
+                        if (imageQueue) {
+                            try {
+                                await page.waitForSelector('#upload-image-to-chat', { timeout: 1500 });
+                                const inputUploadHandle = await page.$('#upload-image-to-chat');
+                                imageQueue.forEach(async item => {
+                                    if (inputUploadHandle) {
+                                        console.warn('Uploading file', item.filePath);
+                                        inputUploadHandle.uploadFile(item.filePath);
+                                        item.isUploaded = true;
+                                    }
+                                    // Dodgy, but works for now, wait for upload...
+                                    await new Promise(resolve => setTimeout(resolve, 1500));
+                                    if (item.isUploaded && Fs.existsSync(item.filePath)) {
+                                        try {
+                                            console.log('Unlinking', item.filePath);
+                                            Fs.unlinkSync(item.filePath);
+                                        } catch (error) {
+                                            console.error('Failed to unlink a file', item.filePath, item.userId, error);
+                                        }
+                                    }
+                                });
+                            
+                                // Remove only uploaded items from the array where the userId is the current session.
+                                this.imageQueue = this.imageQueue.filter(v => !(v.isUploaded && v.userId == userId));
+                            } catch (error) {
+                                console.log('Could not upload image, no image button present.');
+                            }
+                        }
                         if (queue) {
                             queue.forEach(async item => {
                                 const messageToSend = item.message;
@@ -221,7 +259,6 @@ export class Replika {
                             // Remove items from array.
                             this.messageQueue = this.messageQueue.filter(v => v.userId != userId);
                         }
-                        
                         // Wait a bit...
                         await new Promise(resolve => setTimeout(resolve, 3000));
                     } catch (error) {
