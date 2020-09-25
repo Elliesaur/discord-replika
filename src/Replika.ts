@@ -230,7 +230,7 @@ export class Replika {
                                         item.isUploaded = true;
                                     }
                                     // Dodgy, but works for now, wait for upload...
-                                    await new Promise(resolve => setTimeout(resolve, 1500));
+                                    await new Promise(resolve => setTimeout(resolve, 3000));
                                     if (item.isUploaded && Fs.existsSync(item.filePath)) {
                                         try {
                                             console.log('Unlinking', item.filePath);
