@@ -218,36 +218,45 @@ export class Replika {
                 while (this.sessionInfo.find(v => v.userId == userId)) {
                     try {
                         const queue = this.messageQueue.filter(v => v.userId == userId);
-                        const imageQueue = this.imageQueue.filter(v => v.userId == userId);
-                        if (imageQueue) {
+                        const iQueue = this.imageQueue.filter(v => v.userId == userId);
+                        console.log('Now checking for images to send');
+                        if (iQueue) {
                             try {
                                 await page.waitForSelector('#upload-image-to-chat', { timeout: 1500 });
                                 const inputUploadHandle = await page.$('#upload-image-to-chat');
-                                imageQueue.forEach(async item => {
-                                    if (inputUploadHandle) {
-                                        console.warn('Uploading file', item.filePath);
-                                        inputUploadHandle.uploadFile(item.filePath);
-                                        item.isUploaded = true;
-                                    }
-                                    // Pass this to a timeout function.
-                                    setTimeout((i) => {
-                                        if (i.isUploaded && Fs.existsSync(i.filePath)) {
-                                            try {
-                                                console.log('Unlinking', i.filePath);
-                                                Fs.unlinkSync(i.filePath);
-                                            } catch (error) {
-                                                console.error('Failed to unlink a file', i.filePath, i.userId, error);
-                                            }
+                                iQueue.forEach(async item => {
+                                    try {
+                                        if (inputUploadHandle) {
+                                            console.warn('Uploading file', item.filePath);
+                                            inputUploadHandle.uploadFile(item.filePath);
+                                            item.isUploaded = true;
                                         }
-                                    }, 30000, item);
+                                        // Pass this to a timeout function.
+                                        setTimeout((i) => {
+                                            if (i.isUploaded && Fs.existsSync(i.filePath)) {
+                                                try {
+                                                    console.log('Unlinking', i.filePath);
+                                                    Fs.unlinkSync(i.filePath);
+                                                } catch (error) {
+                                                    console.error('Failed to unlink a file', i.filePath, i.userId, error);
+                                                }
+                                            }
+                                        }, 30000, item);
+                                    } catch (error) {
+                                        console.log('Could not upload image.');
+                                        item.isUploaded = false;
+                                    }
                                 });
-                            
                                 // Remove only uploaded items from the array where the userId is the current session.
                                 this.imageQueue = this.imageQueue.filter(v => !(v.isUploaded && v.userId == userId));
                             } catch (error) {
                                 console.log('Could not upload image, no image button present.');
+                                iQueue.forEach(v => v.isUploaded = false);
                             }
+                            // Wait for image upload to happen.
+                            await new Promise(resolve => setTimeout(resolve, 3000));
                         }
+                        console.log('Now checking for messages to send');
                         if (queue) {
                             queue.forEach(async item => {
                                 const messageToSend = item.message;
