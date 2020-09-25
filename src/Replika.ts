@@ -239,7 +239,7 @@ export class Replika {
                                                 console.error('Failed to unlink a file', i.filePath, i.userId, error);
                                             }
                                         }
-                                    }, 10000, item);
+                                    }, 30000, item);
                                 });
                             
                                 // Remove only uploaded items from the array where the userId is the current session.
