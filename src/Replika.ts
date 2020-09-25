@@ -219,8 +219,7 @@ export class Replika {
                     try {
                         const queue = this.messageQueue.filter(v => v.userId == userId);
                         const iQueue = this.imageQueue.filter(v => v.userId == userId);
-                        console.log('Now checking for images to send');
-                        if (iQueue) {
+                        if (iQueue.length > 0) {
                             try {
                                 await page.waitForSelector('#upload-image-to-chat', { timeout: 1500 });
                                 const inputUploadHandle = await page.$('#upload-image-to-chat');
@@ -256,8 +255,7 @@ export class Replika {
                             // Wait for image upload to happen.
                             await new Promise(resolve => setTimeout(resolve, 3000));
                         }
-                        console.log('Now checking for messages to send');
-                        if (queue) {
+                        if (queue.length > 0) {
                             queue.forEach(async item => {
                                 const messageToSend = item.message;
                                 console.log('Sending message', messageToSend);

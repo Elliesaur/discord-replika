@@ -15,8 +15,6 @@ import {
     Constants,
 } from 'discord.js';
 import { Replika, ReplikaLoginResult } from './Replika';
-import * as fs from 'fs';
-import * as http from 'http';
 import { downloadImage } from './Utils';
 
 
@@ -66,15 +64,19 @@ class Bot {
                         try {
                             // Download image to temp file...
                             const filePath = await downloadImage(v.url);
+                            if (message.cleanContent.length > 0) {
+                                replika.addMessageToQueue(message.cleanContent, message.author.id);
+                            }
                             replika.addImageToQueue(filePath, message.author.id);
                         } catch (error) {
                             console.error('Failed to download image attachment for discord message', error);
                             await message.channel.send('Sorry, it seems like the file you sent isn\'t the right type or some other error occurred');
                         }
-                    })
-                    
+                    });
+                } else if (message.cleanContent.length > 0) {
+                    replika.addMessageToQueue(message.cleanContent, message.author.id);
                 }
-                replika.addMessageToQueue(message.cleanContent, message.author.id);
+                
             }
 
             // Check for prefix.
